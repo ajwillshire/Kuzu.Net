@@ -33,8 +33,11 @@ authoring language is invisible to consumers (see [Consuming from C#](#consuming
 - **Cross-platform.** Targets `win-x64`, `linux-x64`, and `osx-arm64` via
   RID-specific native payloads (once vendored).
 - **C#-friendly boundary.** `Task`-returning async methods, `IReadOnlyList<T>`
-  collections, plain classes/enums — no `FSharpOption`, discriminated unions, or
-  curried members leak across the public API.
+  collections, plain classes/enums — no `FSharpOption` or curried members leak
+  across the public API. The one deliberate discriminated union is
+  `KuzuValueData` (the decoded payload of a result cell): F# consumers get an
+  exhaustive `match`, while C# consumers stay on the accessor surface
+  (`.Kind`, `.AsString()`, `.AsInt64()`, …) and never need to touch it.
 
 ## Install
 
@@ -61,8 +64,16 @@ conn.Query "CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY(name))"
 conn.Query "CREATE (:Person {name: 'Alice', age: 30})" |> ignore
 
 use result = conn.Query "MATCH (p:Person) RETURN p.name, p.age"
+
 for row in result do
-    printfn "%s" (row[0].AsString())
+    // Accessor surface (shared with C#)...
+    printfn "%s is %d" (row[0].AsString()) (row[1].AsInt64())
+
+    // ...or pattern-match the discriminated union for exhaustive handling:
+    match row[1].Value with
+    | KInt64 age -> printfn "age = %d" age
+    | KNull -> printfn "age is unknown"
+    | other -> printfn "unexpected: %A" other
 ```
 
 ### Consuming from C#
@@ -104,9 +115,15 @@ Kùzu native libraries are MIT-licensed and published by the Kùzu project.
 
 ## Roadmap
 
-- [ ] Verify the Kùzu C API extern signatures against a pinned Kùzu release.
+- [ ] Verify the Kùzu C API extern signatures against a pinned Kùzu release
+      (now includes the `kuzu_data_type_id` numeric mapping and the typed
+      value-getter signatures).
 - [ ] Vendor RID-specific native payloads (`win-x64`, `linux-x64`, `osx-arm64`).
-- [ ] Typed value accessors (`AsInt64`, `AsDouble`, `AsBoolean`, node/rel/list/struct).
+- [x] Scalar typed value accessors — `KuzuValueData` DU + `.AsInt64`, `.AsDouble`,
+      `.AsBoolean` over Bool / Int8–64 / UInt8–32 / Float / Double / String.
+- [ ] Structural decode of composite cells (node, rel, list, struct, map,
+      temporal) — they currently surface as `KOther <kind>` with Kùzu's string
+      rendering available via `.AsString()`.
 - [ ] Prepared statements + parameter binding.
 - [ ] An end-to-end test suite gated on a downloaded native library.
 - [ ] First runnable NuGet release.

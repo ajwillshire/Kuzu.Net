@@ -81,18 +81,10 @@ type KuzuQueryResult internal (handle: KuzuQueryResultHandle) =
             let mutable value = KuzuValueStruct()
             NativeMethods.kuzu_flat_tuple_get_value (&tuple, uint64 i, &value) |> ignore
 
-            let strPtr = NativeMethods.kuzu_value_to_string &value
-
-            let rendered =
-                if strPtr = IntPtr.Zero then
-                    null
-                else
-                    let s = Marshal.PtrToStringUTF8 strPtr
-                    NativeMethods.kuzu_destroy_string strPtr
-                    s
+            let cell = KuzuValueDecoder.decode &value
 
             NativeMethods.kuzu_value_destroy &value
-            row.Add(KuzuValue rendered)
+            row.Add cell
 
         NativeMethods.kuzu_flat_tuple_destroy &tuple
         row :> IReadOnlyList<KuzuValue>

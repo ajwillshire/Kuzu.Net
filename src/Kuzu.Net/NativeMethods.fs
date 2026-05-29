@@ -46,6 +46,59 @@ type KuzuValueStruct =
         val mutable IsOwnedByCpp: bool
     end
 
+/// Mirrors `kuzu_logical_type` from `kuzu.h`: a single owned pointer to the
+/// underlying logical-type object. Obtained via `kuzu_value_get_data_type` and
+/// released with `kuzu_data_type_destroy`.
+[<StructLayout(LayoutKind.Sequential)>]
+type KuzuLogicalType =
+    struct
+        val mutable DataType: nativeint
+    end
+
+/// Mirrors `kuzu_data_type_id` from `kuzu.h` — the logical type of a value.
+///
+/// IMPORTANT: these numeric values are version-specific and MUST be verified
+/// against the pinned Kùzu C API version before the binding is run (same caveat
+/// as the struct layouts above — a drifted id mapping silently mis-decodes
+/// result cells). Declared here against a recent Kùzu release. See README
+/// "Roadmap".
+type KuzuDataTypeId =
+    | Any = 0
+    | Node = 10
+    | Rel = 11
+    | RecursiveRel = 12
+    | Serial = 13
+    | Bool = 22
+    | Int64 = 23
+    | Int32 = 24
+    | Int16 = 25
+    | Int8 = 26
+    | UInt64 = 27
+    | UInt32 = 28
+    | UInt16 = 29
+    | UInt8 = 30
+    | Int128 = 31
+    | Double = 32
+    | Float = 33
+    | Date = 34
+    | Timestamp = 35
+    | TimestampSec = 36
+    | TimestampMs = 37
+    | TimestampNs = 38
+    | TimestampTz = 39
+    | Interval = 40
+    | Decimal = 41
+    | InternalId = 42
+    | String = 50
+    | Blob = 51
+    | List = 52
+    | Array = 53
+    | Struct = 54
+    | Map = 55
+    | Union = 56
+    | Pointer = 58
+    | Uuid = 59
+
 /// P/Invoke declarations over the Kùzu C API.
 ///
 /// Kùzu's opaque handle types (`kuzu_database`, `kuzu_connection`,
@@ -115,3 +168,49 @@ module internal NativeMethods =
 
     [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void kuzu_destroy_string(nativeint str)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    [<return: MarshalAs(UnmanagedType.U1)>]
+    extern bool kuzu_value_is_null(KuzuValueStruct& value)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_data_type(KuzuValueStruct& value, KuzuLogicalType& out_type)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuDataTypeId kuzu_data_type_get_id(KuzuLogicalType& data_type)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern void kuzu_data_type_destroy(KuzuLogicalType& data_type)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_bool(KuzuValueStruct& value, [<MarshalAs(UnmanagedType.U1)>] bool& out_result)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_int8(KuzuValueStruct& value, sbyte& out_result)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_int16(KuzuValueStruct& value, int16& out_result)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_int32(KuzuValueStruct& value, int32& out_result)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_int64(KuzuValueStruct& value, int64& out_result)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_uint8(KuzuValueStruct& value, byte& out_result)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_uint16(KuzuValueStruct& value, uint16& out_result)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_uint32(KuzuValueStruct& value, uint32& out_result)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_double(KuzuValueStruct& value, double& out_result)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_float(KuzuValueStruct& value, single& out_result)
+
+    [<DllImport(Lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern KuzuState kuzu_value_get_string(KuzuValueStruct& value, nativeint& out_result)
