@@ -1,0 +1,26 @@
+<Project>
+
+  <!-- Repo-wide package + build defaults inherited by every project. -->
+  <PropertyGroup>
+    <Authors>Andrew J. Willshire</Authors>
+    <Copyright>Copyright (c) Andrew J. Willshire</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ajwillshire/Kuzu.Net</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ajwillshire/Kuzu.Net</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>kuzu;graph-database;cypher;opencypher;fsharp;dotnet;interop;pinvoke;embedded</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- SemVer-on-0.x: minor bumps may break during 0.x; patch bumps stay non-breaking. -->
+    <Version>0.1.0</Version>
+
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>Kuzu.Net</PackageId>
+    <Title>Kuzu.Net</Title>
+    <Description>A .NET binding for Kùzu, the embeddable property-graph database with openCypher queries. Thin P/Invoke layer over the Kùzu C API with a C#-ergonomic public surface.</Description>
+    <IsPackable>true</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="NativeMethods.fs" />
+    <Compile Include="KuzuException.fs" />
+    <Compile Include="SafeHandles.fs" />
+    <Compile Include="KuzuValue.fs" />
+    <Compile Include="KuzuQueryResult.fs" />
+    <Compile Include="KuzuConnection.fs" />
+    <Compile Include="KuzuDatabase.fs" />
+  </ItemGroup>
+
+</Project>

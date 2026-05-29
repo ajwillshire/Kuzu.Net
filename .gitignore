@@ -1,0 +1,23 @@
+# .NET
+bin/
+obj/
+*.user
+artifacts/
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# Native payloads (not yet vendored; see README "Native dependency")
+runtimes/*/native/*.dll
+runtimes/*/native/*.so
+runtimes/*/native/*.dylib
+
+# IDE
+.vs/
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
