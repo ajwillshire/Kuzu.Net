@@ -1,0 +1,195 @@
+<Project>
+
+  <!-- ===================================================================
+       Native-artefact provenance verification — the ENFORCEMENT half.
+
+       The data half is native-provenance.props at this repo's root
+       (imported from Directory.Build.props). This file turns what that
+       manifest records into a build outcome:
+
+         NP0001  a vendored artefact's bytes do not match the SHA-256
+                 recorded for it                       (the substitution case)
+         NP0002  a declared artefact is missing from the tree
+         NP0003  an artefact's provenance document is missing, or no
+                 longer states the digest recorded for it
+         NP0004  a native binary exists that no declaration covers
+         NP0005  a source-pinned artefact's build script is missing
+         NP0006  a source-pinned artefact's build script no longer names
+                 the upstream version the manifest pins
+
+       Hashing uses MSBuild's own GetFileHash task, so the check needs no
+       shell, no external tool and no third-party package, and runs
+       identically on every platform the SDK runs on. MSBuild string
+       comparison is case-insensitive, so the recorded digest's case does
+       not matter.
+
+       This body is copy-pasted VERBATIM across the native companions —
+       inlined rather than shared through a package, so each repository
+       stays self-contained and clonable on its own (the same reasoning
+       as the launcher helpers in the workspace conventions). Repo-specific
+       content lives entirely in native-provenance.props; if you change
+       this file, change the other copies.
+
+       Escape hatch: -p:SkipNativeProvenanceCheck=true. It exists for
+       diagnosis, not for shipping — a build that skipped the check has
+       verified nothing about what it packed.
+       =================================================================== -->
+
+  <PropertyGroup>
+    <!-- Runs in the project that owns the vendored artefacts. Every other
+         project in the repo reaches that project by ProjectReference, so
+         any build of the solution, the tests, or a pack runs it once. -->
+    <_RunNativeProvenance Condition="'$(NativeProvenanceProject)' != '' AND '$(MSBuildProjectName)' == '$(NativeProvenanceProject)' AND '$(SkipNativeProvenanceCheck)' != 'true'">true</_RunNativeProvenance>
+  </PropertyGroup>
+
+  <Target Name="VerifyNativeProvenance"
+          BeforeTargets="Build"
+          Condition="'$(_RunNativeProvenance)' == 'true'"
+          DependsOnTargets="_NativeProvenanceArtefactsPresent;_NativeProvenanceDigests;_NativeProvenanceDocs;_NativeProvenanceSourcePins;_NativeProvenanceDeclaredAbsences;_NativeProvenanceUndeclared">
+    <Message Importance="normal"
+             Text="Native provenance verified for $(NativeProvenanceCompanion): @(NativeArtefact->Count()) hash-pinned artefact(s), @(NativeSourcePin->Count()) source-pinned scope(s), @(NativeNotVendored->Count()) declared-not-vendored." />
+  </Target>
+
+  <!-- 1 — every declared artefact is where the manifest says it is. -->
+  <Target Name="_NativeProvenanceArtefactsPresent" Condition="'$(_RunNativeProvenance)' == 'true'">
+    <Error Condition="'%(NativeArtefact.Pin)' == 'Sha256' AND !Exists('%(NativeArtefact.FullPath)')"
+           Code="NP0002"
+           Text="Native provenance: declared artefact '%(NativeArtefact.Artefact)' (%(NativeArtefact.Rid)) is missing from the tree at '%(NativeArtefact.Identity)'. native-provenance.props records a SHA-256 for it, so the build cannot proceed without it. Restore the file, or remove its declaration if the artefact is genuinely no longer shipped." />
+  </Target>
+
+  <!-- 2 — the bytes on disk match the recorded digest. -->
+  <Target Name="_NativeProvenanceDigests"
+          Condition="'$(_RunNativeProvenance)' == 'true'"
+          DependsOnTargets="_NativeProvenanceArtefactsPresent">
+
+    <ItemGroup>
+      <_NativeHashPinned Include="@(NativeArtefact)" Condition="'%(NativeArtefact.Pin)' == 'Sha256'" />
+    </ItemGroup>
+
+    <GetFileHash Files="@(_NativeHashPinned)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="_NativeHashed" />
+    </GetFileHash>
+
+    <Error Condition="'%(_NativeHashed.FileHash)' != '%(_NativeHashed.Sha256)'"
+           Code="NP0001"
+           Text="Native provenance MISMATCH — '%(_NativeHashed.Artefact)' (%(_NativeHashed.Rid)) does not match its recorded provenance.%0A  artefact: %(_NativeHashed.Identity)%0A  recorded SHA-256: %(_NativeHashed.Sha256)%0A  actual   SHA-256: %(_NativeHashed.FileHash)%0A  recorded upstream: %(_NativeHashed.UpstreamRepository) @ %(_NativeHashed.UpstreamVersion) (%(_NativeHashed.UpstreamCommit))%0AA vendored native binary whose bytes changed is either a substitution or a deliberate re-vendoring. Establish which before shipping it: if deliberate, update Sha256 + Bytes + BuildDate in native-provenance.props and the matching rows in %(_NativeHashed.Doc) in the same commit." />
+  </Target>
+
+  <!-- 3 — the artefact's provenance document still states the same digest.
+       The document is what a consumer reads (it is packed alongside the
+       binary); the manifest is what the build enforces. This check is what
+       keeps the two from drifting apart, which is the failure mode that
+       turns a provenance file into decoration. -->
+  <Target Name="_NativeProvenanceDocs"
+          Condition="'$(_RunNativeProvenance)' == 'true'"
+          Outputs="%(NativeArtefact.Identity)">
+
+    <Error Condition="'%(NativeArtefact.Doc)' != '' AND !Exists('%(NativeArtefact.Doc)')"
+           Code="NP0003"
+           Text="Native provenance: the provenance document for '%(NativeArtefact.Artefact)' (%(NativeArtefact.Rid)) is missing at '%(NativeArtefact.Doc)'." />
+
+    <PropertyGroup>
+      <_NpDocText></_NpDocText>
+      <_NpDocText Condition="'%(NativeArtefact.Doc)' != '' AND Exists('%(NativeArtefact.Doc)')">$([System.IO.File]::ReadAllText('%(NativeArtefact.Doc)'))</_NpDocText>
+      <_NpDocStatesDigest>true</_NpDocStatesDigest>
+      <_NpDocStatesDigest Condition="'$(_NpDocText)' != '' AND '%(NativeArtefact.Sha256)' != ''">$(_NpDocText.ToUpperInvariant().Contains('%(NativeArtefact.Sha256)'))</_NpDocStatesDigest>
+    </PropertyGroup>
+
+    <Error Condition="'$(_NpDocStatesDigest)' != 'true'"
+           Code="NP0003"
+           Text="Native provenance: '%(NativeArtefact.Doc)' no longer states the SHA-256 recorded for '%(NativeArtefact.Artefact)' (%(NativeArtefact.Rid)) in native-provenance.props (%(NativeArtefact.Sha256)). The document ships beside the binary and is what a consumer verifies against, so the two records must agree — update whichever one is stale." />
+  </Target>
+
+  <!-- 4 — source-pinned scopes: artefacts built locally from pinned
+       upstream source. Their bytes are not reproducible across machines
+       and toolchains, so what is pinned is the SOURCE: a pin file naming
+       the upstream version, which the build script READS rather than
+       duplicating, and which must still say what this manifest records.
+
+       The pin file matters more than it looks. An earlier draft asserted
+       that the build script "mentions" the pinned version — and a probe
+       showed it green after the script's tag was bumped, because the old
+       version still appeared in a comment two lines above. A check that a
+       stale mention satisfies is exactly the decorative provenance this
+       whole mechanism exists to replace. One file whose entire content is
+       the pin, consumed by the script, compared exactly here. -->
+  <Target Name="_NativeProvenanceSourcePins"
+          Condition="'$(_RunNativeProvenance)' == 'true'"
+          Outputs="%(NativeSourcePin.Identity)">
+
+    <Error Condition="'%(NativeSourcePin.BuildScript)' != '' AND !Exists('%(NativeSourcePin.BuildScript)')"
+           Code="NP0005"
+           Text="Native provenance: the build script for source-pinned scope '%(NativeSourcePin.Identity)' is missing at '%(NativeSourcePin.BuildScript)'. That script is the provenance — without it the artefacts under this scope have none." />
+
+    <Error Condition="'%(NativeSourcePin.PinFile)' != '' AND !Exists('%(NativeSourcePin.PinFile)')"
+           Code="NP0005"
+           Text="Native provenance: the upstream pin file for source-pinned scope '%(NativeSourcePin.Identity)' is missing at '%(NativeSourcePin.PinFile)'. The build script reads its default upstream version from that file; without it, nothing states which upstream release the artefacts under this scope come from." />
+
+    <PropertyGroup>
+      <_NpPinFileRaw></_NpPinFileRaw>
+      <_NpPinFileRaw Condition="'%(NativeSourcePin.PinFile)' != '' AND Exists('%(NativeSourcePin.PinFile)')">$([System.IO.File]::ReadAllText('%(NativeSourcePin.PinFile)'))</_NpPinFileRaw>
+      <_NpPinFileText></_NpPinFileText>
+      <_NpPinFileText Condition="'$(_NpPinFileRaw)' != ''">$(_NpPinFileRaw.Trim())</_NpPinFileText>
+    </PropertyGroup>
+
+    <Error Condition="'%(NativeSourcePin.PinFile)' != '' AND '$(_NpPinFileText)' != '%(NativeSourcePin.UpstreamVersion)'"
+           Code="NP0006"
+           Text="Native provenance: the upstream pin file for scope '%(NativeSourcePin.Identity)' says '$(_NpPinFileText)', but native-provenance.props records '%(NativeSourcePin.UpstreamVersion)'. That file is what the build script builds from, so the two disagreeing means the manifest describes a different upstream release than the one this repository would produce. Bumping the pin is a deliberate act: change the pin file, the manifest's UpstreamVersion and UpstreamCommit, and the provenance document, in the same commit." />
+
+    <!-- The scope's provenance document is held to the manifest the same way
+         a hash-pinned artefact's is: it must exist, and it must still name
+         the pinned upstream version. -->
+    <Error Condition="'%(NativeSourcePin.Doc)' != '' AND !Exists('%(NativeSourcePin.Doc)')"
+           Code="NP0003"
+           Text="Native provenance: the provenance document for source-pinned scope '%(NativeSourcePin.Identity)' is missing at '%(NativeSourcePin.Doc)'." />
+
+    <PropertyGroup>
+      <_NpScopeDocText></_NpScopeDocText>
+      <_NpScopeDocText Condition="'%(NativeSourcePin.Doc)' != '' AND Exists('%(NativeSourcePin.Doc)')">$([System.IO.File]::ReadAllText('%(NativeSourcePin.Doc)'))</_NpScopeDocText>
+      <_NpScopeDocPinned>true</_NpScopeDocPinned>
+      <_NpScopeDocPinned Condition="'$(_NpScopeDocText)' != '' AND '%(NativeSourcePin.UpstreamVersion)' != ''">$(_NpScopeDocText.Contains('%(NativeSourcePin.UpstreamVersion)'))</_NpScopeDocPinned>
+    </PropertyGroup>
+
+    <Error Condition="'$(_NpScopeDocPinned)' != 'true'"
+           Code="NP0003"
+           Text="Native provenance: '%(NativeSourcePin.Doc)' no longer names '%(NativeSourcePin.UpstreamVersion)', the upstream version native-provenance.props pins for scope '%(NativeSourcePin.Identity)'. The document is what a reader consults; the manifest is what the build enforces. They must agree." />
+  </Target>
+
+  <!-- 5 — declared absences. A companion whose native payload is not
+       vendored yet says so in its manifest rather than being silent, and
+       the document stating what is expected, from where, and under what
+       terms it will be pinned when it lands must actually exist. An
+       absence nobody wrote down is indistinguishable from an omission —
+       which is the reading this whole mechanism exists to close. -->
+  <Target Name="_NativeProvenanceDeclaredAbsences"
+          Condition="'$(_RunNativeProvenance)' == 'true'"
+          Outputs="%(NativeNotVendored.Identity)">
+
+    <Error Condition="'%(NativeNotVendored.Doc)' != '' AND !Exists('%(NativeNotVendored.Doc)')"
+           Code="NP0003"
+           Text="Native provenance: the document declaring '%(NativeNotVendored.Identity)' as not-yet-vendored is missing at '%(NativeNotVendored.Doc)'. The declaration of an absence is the only provenance this companion has; it cannot go missing quietly." />
+  </Target>
+
+  <!-- 6 — nothing native ships undeclared. Without this, the manifest
+       records only what somebody remembered to record, and a binary added
+       later has no provenance and nothing that notices. -->
+  <Target Name="_NativeProvenanceUndeclared" Condition="'$(_RunNativeProvenance)' == 'true'">
+
+    <ItemGroup>
+      <_NativeOnDisk Include="$(NativeScanRoot)**/*.dll;$(NativeScanRoot)**/*.so;$(NativeScanRoot)**/*.so.*;$(NativeScanRoot)**/*.dylib"
+                     Exclude="$(NativeScanExclude)" />
+
+      <!-- Everything beneath a source-pinned scope is covered by that
+           scope's declaration. -->
+      <_NativeCovered Include="%(NativeSourcePin.Identity)/**/*.dll;%(NativeSourcePin.Identity)/**/*.so;%(NativeSourcePin.Identity)/**/*.so.*;%(NativeSourcePin.Identity)/**/*.dylib"
+                      Condition="'%(NativeSourcePin.Identity)' != ''" />
+
+      <_NativeUndeclared Include="@(_NativeOnDisk)" Exclude="@(NativeArtefact);@(_NativeCovered)" />
+    </ItemGroup>
+
+    <Error Condition="'@(_NativeUndeclared)' != ''"
+           Code="NP0004"
+           Text="Native provenance: undeclared native artefact(s) in $(NativeProvenanceCompanion):%0A  @(_NativeUndeclared->'%(Identity)', '%0A  ')%0ANothing in native-provenance.props covers these, so they would ship with no recorded upstream source and no digest. Declare each one (upstream repository, version, licence, SHA-256), or exclude the path from NativeScanExclude if it is not a shipped artefact.$(NativeProvenanceHint)" />
+  </Target>
+
+</Project>

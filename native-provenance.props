@@ -1,0 +1,56 @@
+<Project>
+
+  <!-- ===================================================================
+       Native-artefact provenance manifest — Kuzu.Net.
+
+       This is the DATA half of the provenance mechanism; the enforcement
+       half is Directory.Build.targets beside it. The manifest is MSBuild
+       rather than JSON deliberately: the fact being recorded is a
+       property of a build input, the enforcement is a build step, and a
+       manifest the build must parse through a third-party reader is a
+       manifest that can silently stop being read.
+
+       This companion vendors NOTHING TODAY, and that is what the manifest
+       records. The binding declares its externs against the Kùzu C API
+       and no native payload has been vendored for any runtime identifier
+       (see the README's status note and roadmap). A companion with no
+       provenance file and a companion with nothing to have provenance FOR
+       look identical from outside, so the absence is declared here rather
+       than left to be inferred.
+
+       The declaration is not decorative: the undeclared-artefact scan
+       (NP0004) covers this repository, so the moment a native library
+       appears anywhere in it — dropped in for local testing, downloaded
+       by a future vendoring step, committed by a future phase — the build
+       goes red and names it. Making it green again means recording what
+       it is, where it came from and its SHA-256, which is exactly the
+       conversation that should happen at the moment a native binary
+       enters a repository rather than months later.
+       =================================================================== -->
+
+  <PropertyGroup>
+    <NativeProvenanceCompanion>Kuzu.Net</NativeProvenanceCompanion>
+    <NativeProvenanceProject>Kuzu.Net</NativeProvenanceProject>
+
+    <NativeScanRoot>$(MSBuildThisFileDirectory)</NativeScanRoot>
+    <NativeScanExclude>$(NativeScanRoot)**/bin/**;$(NativeScanRoot)**/obj/**;$(NativeScanRoot)artifacts/**;$(NativeScanRoot).git/**</NativeScanExclude>
+
+    <NativeProvenanceHint>%0AThis companion declares NO vendored native artefact. If you are vendoring the Kùzu library for the first time, that is a deliberate act: declare it as a hash-pinned NativeArtefact in native-provenance.props (upstream release, version, licence, SHA-256 of the downloaded asset), record it in NATIVE-PROVENANCE.md, and the build will hold those bytes to that digest from then on.</NativeProvenanceHint>
+  </PropertyGroup>
+
+  <ItemGroup>
+
+    <NativeNotVendored Include="kuzu">
+      <Artefacts>kuzu_shared / libkuzu — the Kùzu C API shared library (DllImport name "kuzu", see src/Kuzu.Net/NativeMethods.fs)</Artefacts>
+      <IntendedRids>win-x64; linux-x64; osx-arm64</IntendedRids>
+      <Upstream>kuzu</Upstream>
+      <UpstreamRepository>https://github.com/kuzudb/kuzu</UpstreamRepository>
+      <UpstreamVersion>none — no release is pinned yet; the extern signatures are declared against the C API and still need verifying against a pinned release (README, Roadmap)</UpstreamVersion>
+      <UpstreamLicense>MIT</UpstreamLicense>
+      <PinWhenVendored>Sha256 — upstream publishes prebuilt release archives, so the vendored payload will be a downloaded binary held to its digest, not a local build</PinWhenVendored>
+      <Doc>$(MSBuildThisFileDirectory)NATIVE-PROVENANCE.md</Doc>
+    </NativeNotVendored>
+
+  </ItemGroup>
+
+</Project>

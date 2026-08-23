@@ -21,6 +21,12 @@
 
   <ItemGroup Condition="'$(IsPackable)' == 'true'">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)NATIVE-PROVENANCE.md" Pack="true" PackagePath="\" />
   </ItemGroup>
+
+  <!-- The native-artefact provenance manifest. This companion vendors nothing
+       today and declares that; the build (Directory.Build.targets) fails when a
+       native binary appears that the manifest does not cover. -->
+  <Import Project="$(MSBuildThisFileDirectory)native-provenance.props" />
 
 </Project>

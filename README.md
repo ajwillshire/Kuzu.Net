@@ -113,6 +113,18 @@ library for your platform alongside your application's output.
 
 Kùzu native libraries are MIT-licensed and published by the Kùzu project.
 
+**The not-yet-vendored state is declared, not merely true.**
+[`NATIVE-PROVENANCE.md`](NATIVE-PROVENANCE.md) records what is expected, from
+where, under what licence, and how it will be pinned when it lands;
+`native-provenance.props` is the machine-readable half, and the build enforces
+it. Concretely: a `.dll`, `.so` or `.dylib` appearing anywhere in this
+repository fails the build (`NP0004`) naming the file, because nothing here
+declares one. Declaring a vendored artefact — upstream release, licence,
+SHA-256 — is what makes it green again, and from then on a binary whose bytes
+do not match its recorded digest fails the build too. The point is that the
+decision about what a native binary is and where it came from happens when it
+enters the repository rather than months afterwards.
+
 ## Roadmap
 
 - [ ] Verify the Kùzu C API extern signatures against a pinned Kùzu release
